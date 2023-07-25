@@ -1,29 +1,9 @@
-pub fn replace_a_to_b(str: &mut String, a: &str, b: &str) {
-    let mut i = 0;
-    while let Some(index) = str[i..].find(a) {
-        let start = i + index;
-        let end = start + a.len();
-        str.replace_range(start..end, b);
-        i = end;
-    }
-}
-
-fn implode(s: &Vec<String>, delim: &str) -> String {
-    let mut ret = String::new();
-    for (i, item) in s.iter().enumerate() {
-        if i > 0 {
-            ret.push_str(delim);
-        }
-        ret.push_str(item);
-    }
-    ret
-}
-
 /**
 str: input
 leftAndRight: left ('l'), right('r') or both ('b'), def: 'b'
 punctuation: remove punctuation as well, def. false
- */ fn trim(str: &str, left_and_right: char, punctuation: bool) -> String {
+ */
+fn trim(str: &str, left_and_right: char, punctuation: bool) -> String {
     let mut out = str.to_string();
     let re = if left_and_right == 'l' {
         if punctuation {
@@ -46,7 +26,6 @@ punctuation: remove punctuation as well, def. false
     };
     re.replace_all(&mut out, "").to_string()
 }
-
 
 // fn detect_code_page(html: &str) -> String {
 //     let mut out = String::new();

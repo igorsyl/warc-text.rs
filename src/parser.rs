@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::iter::Iterator;
 use lazy_static::lazy_static;
-use libxml::tree::{Document, Node};
+use libxml::tree::{Document, Node, NodeType};
 use regex::Regex;
 
 lazy_static! {
@@ -16,7 +16,6 @@ lazy_static! {
     pub static ref PARSER_RE2: Regex = Regex::new(r"[ 	]+").unwrap();
     pub static ref PARSER_RE3: Regex = Regex::new(r"\s+").unwrap();
 }
-
 
 #[derive(Debug, Clone, Default)]
 pub struct Paragraph {
@@ -36,8 +35,6 @@ pub struct Paragraph {
     pub stopword_density: f32,
     pub link_density: f32,
 
-    // pub m_htmlPosition1: i64,
-    // pub m_htmlPosition2: i64,
     pub m_tag: String,
     pub m_htmlSrc: String,
     pub m_originalTags: Vec<String>,
@@ -67,25 +64,27 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(document: &Document) -> Self {
+    pub fn new() -> Self {
         let mut parser = Parser::default();
         parser.m_dontcareTags.extend(DONTCARE_TAGS.iter());
         parser.m_pTags.extend(PARAGRAPH_TAGS.iter());
-
-        let root = document.get_root_element().ok_or(anyhow::anyhow!("get_root_element")).unwrap();
-        parser.walk_tree(&root, 0);
-
         parser
     }
 
-    fn walk_tree(&mut self, node: &Node, mut depth: usize) {
+    pub fn walk_tree(&mut self, document: &Document) -> anyhow::Result<()> {
+    	let root = document.get_root_element().ok_or(anyhow::anyhow!("get_root_element"))?;
+    	self.walk_tree_helper(&root, 0);
+        Ok(())
+    }
+
+    fn walk_tree_helper(&mut self, node: &Node, mut depth: usize) {
         for curr in node.get_child_nodes() {
             let curr_depth = depth + 1;
             if DONTCARE_TAGS.contains(curr.get_name().as_str()) {
                 continue;
             }
             self.handle_node(&curr, curr_depth);
-            self.walk_tree(&curr, curr_depth);
+            self.walk_tree_helper(&curr, curr_depth);
         }
 
         let tag = node.get_name().to_lowercase();
@@ -99,23 +98,19 @@ impl Parser {
 
     fn handle_node(&mut self, it: &Node, depth: usize) {
         let name = it.get_name().to_lowercase();
-        if name.is_empty() { //|| it.is_comment() {
+        if name.is_empty() || it.get_type().unwrap() == NodeType::CommentNode {
             return;
         }
         while self.m_dom.len() >= depth {
             self.m_dom.pop();
         }
-        if it.is_element_node() {//is_tag() {
+        if it.is_element_node() {
             if DONTCARE_TAGS.contains(&name.as_str()) {
                 // it.skip_children();
                 return;
             }
 
-            if self.m_dom.len() < depth {
-                self.m_dom.push(name.clone());
-            } else {
-                self.m_dom.push(name.clone());
-            }
+            self.m_dom.push(name.clone());
 
             if PARAGRAPH_TAGS.contains(&name.as_str()) || (name == "br" && self.m_br) {
                 if name == "br" {
@@ -142,16 +137,35 @@ impl Parser {
                 }
             }
 
-            // if self.m_currParagraph.html_pos1 == 0 {
-            //     self.m_currParagraph.html_pos1 = it.offset();
-            //     self.m_currParagraph.html_pos2 = it.offset() + it.length();
-            // } else if self.m_br {
-            //     self.m_currParagraph.html_pos2 = it.offset() + it.length();
-            // }
+            match it.get_name().as_str() {
+                "img" if let Some(src) = it.get_attribute("src") => {
+                    self.m_currParagraph.text_nodes.push(format!("<IMAGE>{}</IMAGE>", src).to_string());
+                },
+                "video" if let Some(src) = it.get_attribute("src") => {
+                    for source in it.get_child_nodes() {
+                        match it.get_name().as_str() {
+                            "source" if let Some(src) = source.get_attribute("src") => {
+                                self.m_currParagraph.text_nodes.push(format!("<VIDEO>{}</VIDEO>", src).to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                "audio" if let Some(src) = it.get_attribute("src") => {
+                    for source in it.get_child_nodes() {
+                        match it.get_name().as_str() {
+                            "source" if let Some(src) = source.get_attribute("src") => {
+                                self.m_currParagraph.text_nodes.push(format!("<AUDIO>{}</AUDIO>", src).to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                _ => {}
+            }
         }
 
-        // if !it.is_comment() &&
-        if !it.is_element_node() {
+        if it.is_text_node() {
             // text data
             let mut content = it.get_content();
             PARSER_RE1.replace_all(&mut content, " ");
@@ -191,20 +205,6 @@ impl Parser {
             }
 
             self.m_br = false;
-
-            // if self.m_learning {
-            //     // get parents for learning
-            //     let mut parent_it = it;
-            //     while self.m_currParagraph.m_htmlParents.len() <= 8 {
-            //         parent_it = parent_it.unwrap();
-            //         if parent_it.is_null() {
-            //             break;
-            //         }
-            //         if parent_it.is_element_node() {
-            //             self.m_currParagraph.m_htmlParents.push(parent_it.get_name());
-            //         }
-            //     }
-            // }
         }
     }
 
@@ -229,8 +229,6 @@ impl Parser {
         self.m_currParagraph.stopword_count = 0;
         self.m_currParagraph.stopword_density = 0.0;
 
-        // self.m_currParagraph.m_htmlPosition1 = 0;
-        // self.m_currParagraph.m_htmlPosition2 = 0;
         self.m_currParagraph.m_tag.clear();
         self.m_currParagraph.m_htmlSrc.clear();
         self.m_currParagraph.m_originalTags.clear();

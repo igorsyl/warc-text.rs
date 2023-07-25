@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::parser::{Paragraph, Parser};
-use crate::tools::replace_a_to_b;
 
 const MAX_LINK_DENSITY_DEFAULT: f32 = 0.2;
 const LENGTH_LOW_DEFAULT: i32 = 70;
@@ -33,23 +32,18 @@ pub struct Justext {
 
 impl Justext {
     pub fn new() -> Justext {
-        Justext::default()
+        let mut jt = Justext::default();
+        jt.m_cleanEvalFormat = false;
+        jt
     }
 
     pub fn get_content(&mut self, parser: &mut Parser) -> String {
-        let mut out = String::new();
         self.classify_paragraphs(&mut parser.m_paragraphs);
         self.revise_paragraph_classification(&mut parser.m_paragraphs, MAX_HEADING_DISTANCE_DEFAULT);
         // if self.m_debug {
         //     self.make_debug_output(fsm.get_para(), "test/debugJusText.html", url, encoding);
         // }
-        out = self.output_default(&mut parser.m_paragraphs, true, self.m_cleanEvalFormat);
-        if out.is_empty() {
-            parser.m_haveGood = false;
-        } else {
-            parser.m_haveGood = true;
-        }
-        out
+        self.output_default(&mut parser.m_paragraphs, true, self.m_cleanEvalFormat)
     }
 
     fn classify_paragraphs(&mut self, paragraphs: &mut Vec<Paragraph>) {
@@ -113,8 +107,6 @@ impl Justext {
         let mut j = 0;
         let mut distance = 0;
         for i in 0..paragraphs.len() {
-            // let paragraph = &paragraphs[i];
-        // for (i, paragraph) in paragraphs.iter_mut().enumerate() {
             if !paragraphs[i].heading || paragraphs[i].finalclass != "short" {
                 continue;
             }
@@ -204,7 +196,7 @@ impl Justext {
                 }
                 if !full {
                     out.push_str(&paragraph.text);
-                    out.push_str("\n");
+                    out.push_str(" ");
                 }
             } else {
                 if no_boilerplate {
@@ -213,10 +205,10 @@ impl Justext {
                     tag = "b";
                 }
             }
-            replace_a_to_b(&mut paragraph.text, "&nbsp;", " ");
-            replace_a_to_b(&mut paragraph.text, "&quot;", "\"");
-            replace_a_to_b(&mut paragraph.text, "&gt;", ">");
-            replace_a_to_b(&mut paragraph.text, "&lt;", "<");
+            // replace_a_to_b(&mut paragraph.text, "&nbsp;", " ");
+            // replace_a_to_b(&mut paragraph.text, "&quot;", "\"");
+            // replace_a_to_b(&mut paragraph.text, "&gt;", ">");
+            // replace_a_to_b(&mut paragraph.text, "&lt;", "<");
             if full {
                 let tmp = wrap_text(&mut paragraph.text, 80);
                 if paragraph.m_tag == "pre" {

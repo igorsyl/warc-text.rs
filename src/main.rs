@@ -113,6 +113,7 @@ fn extract_warc_file(warc_path: &str, pbm: &std::sync::Arc<std::sync::Mutex<indi
                 // println!("record {}", result.text_record.len());
                 if write_extracted {
                     let text = &parse_result.content.replace("\n", " ");
+                    // let text = &parse_result.content;
                     extracted_file.write_all(format!("{}\t", text.len()).as_bytes()).unwrap();
                     extracted_file.write_all(text.as_bytes()).unwrap();
                     extracted_file.write_all(b"\n").unwrap();
@@ -187,7 +188,10 @@ fn iter_contents<R, F>(mut warc_reader: warc::WarcReader<R>, pbm: &std::sync::Ar
                                         match extract_content(&http_response) {
                                             Ok(extract_result) => {
                                                 // pbs[1].inc(1);
-                                                f(Ok(extract_result));
+                                                match extract_result.content.len() {
+                                                    l if l > 0 => f(Ok(extract_result)),
+                                                    _ => f(Err(anyhow!("empty")))
+                                                }
                                             }
                                             Err(e) => f(Err(anyhow!(e)).with_context(|| "extract_content"))
                                         }
@@ -227,7 +231,8 @@ fn extract_content(http_response: &str) -> anyhow::Result<ExtractResult> {
     let xml_parser = libxml::parser::Parser::default_html();
     let document = xml_parser.parse_string_with_options(http_body, parser_options)?;
 
-    let mut paragraph_parser = Parser::new(&document);
+    let mut paragraph_parser = Parser::new();
+    paragraph_parser.walk_tree(&document)?;
     let mut justext = justtext::Justext::new();
     let content = justext.get_content(&mut paragraph_parser);
 
