@@ -42,6 +42,8 @@ fn main() {
         // );
     }
 
+    let n_warc_paths = 1;
+
     let pbm = indicatif::MultiProgress::with_draw_target(indicatif::ProgressDrawTarget::stdout());
     let pbm = std::sync::Arc::new(std::sync::Mutex::new(pbm));
     // let pb1 = pbm.add(indicatif::ProgressBar::with_draw_target(None, indicatif::ProgressDrawTarget::stderr()));
@@ -54,7 +56,7 @@ fn main() {
 
     // extract list of warc files
     let warc_path_iterator = read_warc_paths(&warcs_local_path);
-    let mut warc_paths: Vec<String> = warc_path_iterator.take(12).collect();
+    let mut warc_paths: Vec<String> = warc_path_iterator.take(n_warc_paths).collect();
 
     // retrieve warc files
     warc_paths.clone().into_par_iter().for_each(|warc_path| {
@@ -226,7 +228,7 @@ fn extract_content(http_response: &str) -> anyhow::Result<ExtractResult> {
     let document = xml_parser.parse_string_with_options(http_body, parser_options)?;
 
     let mut paragraph_parser = Parser::new(&document);
-    let justext = justtext::Justext::new();
+    let mut justext = justtext::Justext::new();
     let content = justext.get_content(&mut paragraph_parser);
 
     Ok(ExtractResult {

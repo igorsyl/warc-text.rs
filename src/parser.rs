@@ -1,13 +1,22 @@
 use std::collections::HashSet;
 use std::iter::Iterator;
+use lazy_static::lazy_static;
 use libxml::tree::{Document, Node};
+use regex::Regex;
 
-const DONTCARE_TAGS: std::collections::HashSet<&str> = "head,script".split(",").collect();
+lazy_static! {
+    pub static ref DONTCARE_TAGS: std::collections::HashSet<&'static str> = "head,script".split(",").collect();
 
-const PARAGRAPH_TAGS: std::collections::HashSet<&str> = "blockquote,caption,center,col,colgroup,dd,\
-	div,dl,dt,fieldset,form,legend,optgroup,option,\
-	p,pre,table,td,textarea,tfoot,th,thead,tr,\
-	ul,li,h1,h2,h3,h4,h5,h6".split(",").collect();
+    pub static ref PARAGRAPH_TAGS: std::collections::HashSet<&'static str> = "blockquote,caption,center,col,colgroup,dd,\
+        div,dl,dt,fieldset,form,legend,optgroup,option,\
+        p,pre,table,td,textarea,tfoot,th,thead,tr,\
+        ul,li,h1,h2,h3,h4,h5,h6".split(",").collect();
+
+    pub static ref PARSER_RE1: Regex = Regex::new(r"&nbsp;").unwrap();
+    pub static ref PARSER_RE2: Regex = Regex::new(r"[ 	]+").unwrap();
+    pub static ref PARSER_RE3: Regex = Regex::new(r"\s+").unwrap();
+}
+
 
 #[derive(Debug, Clone, Default)]
 pub struct Paragraph {
@@ -27,8 +36,8 @@ pub struct Paragraph {
     pub stopword_density: f32,
     pub link_density: f32,
 
-    pub m_htmlPosition1: i64,
-    pub m_htmlPosition2: i64,
+    // pub m_htmlPosition1: i64,
+    // pub m_htmlPosition2: i64,
     pub m_tag: String,
     pub m_htmlSrc: String,
     pub m_originalTags: Vec<String>,
@@ -44,9 +53,9 @@ pub struct Parser {
     // pub m_dontcare: i64,
     pub m_dom: Vec<String>,
 
-    pub m_pTags: HashSet<String>,
+    pub m_pTags: HashSet<&'static str>,
 
-    pub m_dontcareTags: HashSet<String>,
+    pub m_dontcareTags: HashSet<&'static str>,
 
     pub m_url: String,
     pub m_convertedHtml: String,
@@ -60,10 +69,10 @@ pub struct Parser {
 impl Parser {
     pub fn new(document: &Document) -> Self {
         let mut parser = Parser::default();
-        parser.m_dontcareTags.extend(DONTCARE_TAGS);
-        parser.m_pTags.extend(PARAGRAPH_TAGS);
+        parser.m_dontcareTags.extend(DONTCARE_TAGS.iter());
+        parser.m_pTags.extend(PARAGRAPH_TAGS.iter());
 
-        let root = document.get_root_element().ok_or(anyhow::anyhow!("get_root_element"))?;
+        let root = document.get_root_element().ok_or(anyhow::anyhow!("get_root_element")).unwrap();
         parser.walk_tree(&root, 0);
 
         parser
@@ -75,124 +84,127 @@ impl Parser {
             if DONTCARE_TAGS.contains(curr.get_name().as_str()) {
                 continue;
             }
-            handle_node(&curr, curr_depth);
-            walk_tree(&curr, curr_depth);
+            self.handle_node(&curr, curr_depth);
+            self.walk_tree(&curr, curr_depth);
         }
 
         let tag = node.get_name().to_lowercase();
-        if PARAGRAPH_TAGS.contains(&tag) {
-            start_new_paragraph()
+        if PARAGRAPH_TAGS.contains(tag.as_str()) {
+            self.start_new_paragraph()
         }
         if tag == "A" {
             self.m_link = false;
         }
     }
 
-    fn handle_node(&mut self, it: &Node, depth: usize, dom: &mut Vec<String>, curr_paragraph: &mut Paragraph) {
-        let name = it.name().to_lowercase();
-        if name.is_empty() || it.is_comment() {
+    fn handle_node(&mut self, it: &Node, depth: usize) {
+        let name = it.get_name().to_lowercase();
+        if name.is_empty() { //|| it.is_comment() {
             return;
         }
-        while dom.len() >= depth {
-            dom.pop();
+        while self.m_dom.len() >= depth {
+            self.m_dom.pop();
         }
-        if it.is_tag() {
-            if DONTCARE_TAGS.contains(&name) {
-                it.skip_children();
+        if it.is_element_node() {//is_tag() {
+            if DONTCARE_TAGS.contains(&name.as_str()) {
+                // it.skip_children();
                 return;
             }
 
-            if dom.len() < depth {
-                dom.push(name);
+            if self.m_dom.len() < depth {
+                self.m_dom.push(name.clone());
             } else {
-                dom.push(name);
+                self.m_dom.push(name.clone());
             }
 
-            if TAGS.contains(&name) || (name == "br" && BR) {
+            if PARAGRAPH_TAGS.contains(&name.as_str()) || (name == "br" && self.m_br) {
                 if name == "br" {
-                    curr_paragraph.tag_count -= 1;
-                    start_new_paragraph();
+                    self.m_currParagraph.tag_count -= 1;
+                    self.start_new_paragraph();
                 } else {
                     if name == "br" {
-                        BR = true;
+                        self.m_br = true;
                     } else {
-                        BR = false;
+                        self.m_br = false;
                     }
                     if name == "a" {
                         self.m_link = true;
                     }
-                    curr_paragraph.tag_count += 1;
+                    self.m_currParagraph.tag_count += 1;
                 }
 
-                if curr_paragraph.tag.is_empty() {
-                    curr_paragraph.tag = name;
+                if self.m_currParagraph.m_tag.is_empty() {
+                    self.m_currParagraph.m_tag = name;
                 }
 
-                if curr_paragraph.original_tags.is_empty() {
-                    curr_paragraph.original_tags.push(it.text());
+                if self.m_currParagraph.m_originalTags.is_empty() {
+                    self.m_currParagraph.m_originalTags.push(it.get_content());
                 }
             }
 
-            if curr_paragraph.html_pos1 == 0 {
-                curr_paragraph.html_pos1 = it.offset();
-                curr_paragraph.html_pos2 = it.offset() + it.length();
-            } else if BR {
-                curr_paragraph.html_pos2 = it.offset() + it.length();
-            }
+            // if self.m_currParagraph.html_pos1 == 0 {
+            //     self.m_currParagraph.html_pos1 = it.offset();
+            //     self.m_currParagraph.html_pos2 = it.offset() + it.length();
+            // } else if self.m_br {
+            //     self.m_currParagraph.html_pos2 = it.offset() + it.length();
+            // }
         }
 
-        if !it.is_comment() && !it.is_tag() {
+        // if !it.is_comment() &&
+        if !it.is_element_node() {
             // text data
-            let mut content = it.text();
-            RE.replace_all(&mut content, r"&nbsp;", " ");
-            let pre = curr_paragraph.tag == "pre";
+            let mut content = it.get_content();
+            PARSER_RE1.replace_all(&mut content, " ");
+            let pre = self.m_currParagraph.m_tag == "pre";
             if pre {
-                RE.replace_all(&mut content, r#"\s+"#, " ");
+                PARSER_RE2.replace_all(&mut content, " ");
             } else {
-                RE.replace_all(&mut content, r"\s+", " ");
+                PARSER_RE3.replace_all(&mut content, " ");
             }
 
             if content.trim().is_empty() {
-                if BR {
-                    if dom.len() > 2 && dom[dom.len() - 2] == "b" && dom[dom.len() - 1] == "br" && curr_paragraph.text_nodes.len() == 1 {
-                        curr_paragraph.heading = true;
-                        start_new_paragraph();
-                    } else if !curr_paragraph.text_nodes.is_empty() {
-                        curr_paragraph.text_nodes.push("\n".to_string());
+                if self.m_br {
+                    if self.m_dom.len() > 2 && self.m_dom[self.m_dom.len() - 2] == "b" && self.m_dom[self.m_dom.len() - 1] == "br" && self.m_currParagraph
+                        .text_nodes
+                        .len() == 1 {
+                        self.m_currParagraph.heading = true;
+                        self.start_new_paragraph();
+                    } else if !self.m_currParagraph.text_nodes.is_empty() {
+                        self.m_currParagraph.text_nodes.push("\n".to_string());
                     }
                 } else if pre {
-                    curr_paragraph.text_nodes.push(" ".to_string());
+                    self.m_currParagraph.text_nodes.push(" ".to_string());
                 }
                 return;
             }
 
-            if BR {
-                content = "\n".to_owned() + content;
-                curr_paragraph.html_pos2 = it.offset() + it.length();
+            if self.m_br {
+                content = "\n".to_owned() + content.as_str();
+                // curr_paragraph.m_htmlPosition2 = it.offset() + it.length();
             }
 
-            curr_paragraph.text_nodes.push(content);
-            curr_paragraph.html_pos2 = it.offset() + it.length();
+            self.m_currParagraph.text_nodes.push(content.clone());
+            // curr_paragraph.m_htmlPosition2 = it.offset() + it.length();
 
             if self.m_link {
-                curr_paragraph.linked_char_count += content.len() as i64;
+                self.m_currParagraph.linked_char_count += content.len() as i64;
             }
 
-            BR = false;
+            self.m_br = false;
 
-            if LEARNING {
-                // get parents for learning
-                let mut parent_it = it;
-                while curr_paragraph.html_parents.len() <= 8 {
-                    parent_it = parent_it.parent();
-                    if parent_it.is_none() {
-                        break;
-                    }
-                    if parent_it.unwrap().is_tag() {
-                        curr_paragraph.html_parents.push(parent_it.unwrap().name());
-                    }
-                }
-            }
+            // if self.m_learning {
+            //     // get parents for learning
+            //     let mut parent_it = it;
+            //     while self.m_currParagraph.m_htmlParents.len() <= 8 {
+            //         parent_it = parent_it.unwrap();
+            //         if parent_it.is_null() {
+            //             break;
+            //         }
+            //         if parent_it.is_element_node() {
+            //             self.m_currParagraph.m_htmlParents.push(parent_it.get_name());
+            //         }
+            //     }
+            // }
         }
     }
 
@@ -200,13 +212,13 @@ impl Parser {
         self.m_currParagraph.dom_path = self.m_dom.join(".");
 
         if !self.m_currParagraph.text_nodes.is_empty() {
-            self.m_currParagraph.text = m_currParagraph.text_nodes.join("");
+            self.m_currParagraph.text = self.m_currParagraph.text_nodes.join("");
 
             // If the text was split into multiple chunks, count each chunk as a word
             let words: Vec<String> = self.m_currParagraph.text.split("").map(|s| s.to_string()).collect();
             self.m_currParagraph.word_count = words.len() as i64;
 
-            self.m_paragraphs.push(m_currParagraph);
+            self.m_paragraphs.push(self.m_currParagraph.clone());
         }
 
         self.m_currParagraph.text_nodes.clear();
@@ -217,8 +229,8 @@ impl Parser {
         self.m_currParagraph.stopword_count = 0;
         self.m_currParagraph.stopword_density = 0.0;
 
-        self.m_currParagraph.m_htmlPosition1 = 0;
-        self.m_currParagraph.m_htmlPosition2 = 0;
+        // self.m_currParagraph.m_htmlPosition1 = 0;
+        // self.m_currParagraph.m_htmlPosition2 = 0;
         self.m_currParagraph.m_tag.clear();
         self.m_currParagraph.m_htmlSrc.clear();
         self.m_currParagraph.m_originalTags.clear();

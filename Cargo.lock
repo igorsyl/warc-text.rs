@@ -872,6 +872,7 @@ dependencies = [
  "flate2",
  "gzip",
  "indicatif",
+ "lazy_static",
  "libflate",
  "libxml",
  "rayon",
