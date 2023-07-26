@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use std::fs::{File, read_to_string};
+use std::io::{BufRead, Read};
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::parser::{Paragraph, Parser};
@@ -15,11 +17,11 @@ lazy_static! {
     pub static ref JUSTEXT_RE1 : Regex = Regex::new(r"(^h\\d|\\.h\\d)").unwrap();
     pub static ref JUSTEXT_RE2 : Regex = Regex::new(r"(^li|\\.li)").unwrap();
     pub static ref JUSTEXT_RE3 : Regex = Regex::new(r"(^select|\\.select)").unwrap();
+    pub static ref STOPLIST : HashSet<String> = read_to_string("stoplists/English.txt").unwrap().lines().map(|s| s.to_string()).collect();
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Justext {
-    m_stoplist: HashSet<String>,
     m_length_low: i64,
     m_length_high: i64,
     m_stopwords_low: f32,
@@ -27,14 +29,11 @@ pub struct Justext {
     m_max_link_density: f32,
     m_no_headings: bool,
     m_debug: bool,
-    m_cleanEvalFormat: bool,
 }
 
 impl Justext {
     pub fn new() -> Justext {
-        let mut jt = Justext::default();
-        jt.m_cleanEvalFormat = false;
-        jt
+        Justext::default()
     }
 
     pub fn get_content(&mut self, parser: &mut Parser) -> String {
@@ -43,13 +42,14 @@ impl Justext {
         // if self.m_debug {
         //     self.make_debug_output(fsm.get_para(), "test/debugJusText.html", url, encoding);
         // }
-        self.output_default(&mut parser.m_paragraphs, true, self.m_cleanEvalFormat)
+        self.output_default(&mut parser.m_paragraphs)
     }
 
     fn classify_paragraphs(&mut self, paragraphs: &mut Vec<Paragraph>) {
         for paragraph in paragraphs.iter_mut() {
             let length = paragraph.text.len() as i64;
-            let stopword_count = paragraph.text.split(|c : char| c.is_whitespace()).count() - 1;
+            let stopword_count = paragraph.text.split(|c : char| c.is_whitespace()).filter(|s| STOPLIST.contains(*s)).count();
+
             let words: Vec<String> = paragraph.text.split(|c : char| c.is_whitespace()).map(|s| s.to_string()).collect();
             let stopword_density = stopword_count as f32 / words.len() as f32;
             let link_density = paragraph.linked_char_count as f32 / length as f32;
@@ -182,7 +182,7 @@ impl Justext {
         }
     }
 
-    fn output_default(&self, paragraphs: &mut Vec<Paragraph>, no_boilerplate: bool, full: bool) -> String {
+    fn output_default(&self, paragraphs: &mut Vec<Paragraph>) -> String {
         let mut out = String::new();
         for mut paragraph in paragraphs {
             let &mut tag;
@@ -194,32 +194,32 @@ impl Justext {
                 } else {
                     tag = "p";
                 }
-                if !full {
-                    out.push_str(&paragraph.text);
-                    out.push_str(" ");
-                }
+                // if !full {
+                //     out.push_str(&paragraph.text);
+                //     out.push_str(" ");
+                // }
             } else {
-                if no_boilerplate {
-                    continue;
-                } else {
-                    tag = "b";
-                }
+                // if no_boilerplate {
+                //     continue;
+                // } else {
+                //     tag = "b";
+                // }
             }
             // replace_a_to_b(&mut paragraph.text, "&nbsp;", " ");
             // replace_a_to_b(&mut paragraph.text, "&quot;", "\"");
             // replace_a_to_b(&mut paragraph.text, "&gt;", ">");
             // replace_a_to_b(&mut paragraph.text, "&lt;", "<");
-            if full {
-                let tmp = wrap_text(&mut paragraph.text, 80);
-                if paragraph.m_tag == "pre" {
-                    let re = regex::Regex::new(r"\n>?[ \t]?\n>?").unwrap();
-                    out.push_str(&re.replace_all(&tmp, format!("\n\n<{}>", tag).to_string()));
-                } else {
-                    out.push_str(format!("<{}>", tag).as_str());
-                    out.push_str(&tmp);
-                    out.push_str("\n\n");
-                }
-            }
+            // if full {
+            //     let tmp = wrap_text(&mut paragraph.text, 80);
+            //     if paragraph.m_tag == "pre" {
+            //         let re = regex::Regex::new(r"\n>?[ \t]?\n>?").unwrap();
+            //         out.push_str(&re.replace_all(&tmp, format!("\n\n<{}>", tag).to_string()));
+            //     } else {
+            //         out.push_str(format!("<{}>", tag).as_str());
+            //         out.push_str(&tmp);
+            //         out.push_str("\n\n");
+            //     }
+            // }
         }
         out
     }

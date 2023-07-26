@@ -1,3 +1,29 @@
+// Failed at trying to disable libxml error messages
+// unsafe {
+// ctx = libxml::bindings::
+// xmlSchemaSetValidErrors
+// let c_string = std::ffi::CString::new("").unwrap();
+// let ctxt = libxml::bindings::xmlSchemaNewParserCtxt(c_string.as_ptr());
+// let schema = libxml::bindings::xmlSchemaParse(ctxt);
+// libxml::bindings::xmlSchemaSetValidErrors(
+//     libxml::bindings::xmlSchemaNewValidCtxt(schema),
+//     libxml::bindings::xmlSchemaValidityErrorFunc::default(),
+//     libxml::bindings::xmlSchemaValidityWarningFunc::default(),
+//     std::ptr::null_mut(),
+// );
+// libxml::bindings::xmlSchemaSetParserErrors(
+//     ctxt,
+//     libxml::bindings::xmlSchemaValidityErrorFunc::default(),
+//     libxml::bindings::xmlSchemaValidityWarningFunc::default(),
+//     std::ptr::null_mut(),
+// );
+// libxml::bindings::xmlSchemaSetParserStructuredErrors(
+//     libxml::bindings::xmlSchemaNewParserCtxt(c_string.as_ptr()),
+//     libxml::bindings::xmlStructuredErrorFunc::default(),
+//     std::ptr::null_mut(),
+// );
+// }
+
 // let warc_file = std::fs::File::open(&warc_local_path).unwrap();
 // let mut file_reader = std::io::BufReader::with_capacity(1_048_576, warc_file);
 // let gzip_stream = gzip::GzipReader::new(file_reader);

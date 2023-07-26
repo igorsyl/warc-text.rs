@@ -50,10 +50,6 @@ pub struct Parser {
     // pub m_dontcare: i64,
     pub m_dom: Vec<String>,
 
-    pub m_pTags: HashSet<&'static str>,
-
-    pub m_dontcareTags: HashSet<&'static str>,
-
     pub m_url: String,
     pub m_convertedHtml: String,
     pub m_invalid_characters: bool,
@@ -65,10 +61,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new() -> Self {
-        let mut parser = Parser::default();
-        parser.m_dontcareTags.extend(DONTCARE_TAGS.iter());
-        parser.m_pTags.extend(PARAGRAPH_TAGS.iter());
-        parser
+        Parser::default()
     }
 
     pub fn walk_tree(&mut self, document: &Document) -> anyhow::Result<()> {
@@ -80,7 +73,7 @@ impl Parser {
     fn walk_tree_helper(&mut self, node: &Node, mut depth: usize) {
         for curr in node.get_child_nodes() {
             let curr_depth = depth + 1;
-            if DONTCARE_TAGS.contains(curr.get_name().as_str()) {
+            if curr.is_element_node() && DONTCARE_TAGS.contains(curr.get_name().as_str()) {
                 continue;
             }
             self.handle_node(&curr, curr_depth);
@@ -91,13 +84,13 @@ impl Parser {
         if PARAGRAPH_TAGS.contains(tag.as_str()) {
             self.start_new_paragraph()
         }
-        if tag == "A" {
+        if tag == "a" {
             self.m_link = false;
         }
     }
 
     fn handle_node(&mut self, it: &Node, depth: usize) {
-        let name = it.get_name().to_lowercase();
+        let name = it.get_name().to_lowercase().to_owned();
         if name.is_empty() || it.get_type().unwrap() == NodeType::CommentNode {
             return;
         }
@@ -115,29 +108,25 @@ impl Parser {
             if PARAGRAPH_TAGS.contains(&name.as_str()) || (name == "br" && self.m_br) {
                 if name == "br" {
                     self.m_currParagraph.tag_count -= 1;
-                    self.start_new_paragraph();
-                } else {
-                    if name == "br" {
-                        self.m_br = true;
-                    } else {
-                        self.m_br = false;
-                    }
-                    if name == "a" {
-                        self.m_link = true;
-                    }
-                    self.m_currParagraph.tag_count += 1;
                 }
-
-                if self.m_currParagraph.m_tag.is_empty() {
-                    self.m_currParagraph.m_tag = name;
+                self.start_new_paragraph();
+            } else {
+                self.m_br = name == "br";
+                if name == "a" {
+                    self.m_link = true;
                 }
-
-                if self.m_currParagraph.m_originalTags.is_empty() {
-                    self.m_currParagraph.m_originalTags.push(it.get_content());
-                }
+                self.m_currParagraph.tag_count += 1;
             }
 
-            match it.get_name().as_str() {
+            if self.m_currParagraph.m_tag.is_empty() {
+                self.m_currParagraph.m_tag = name.clone();
+            }
+
+            if self.m_currParagraph.m_originalTags.is_empty() {
+                self.m_currParagraph.m_originalTags.push(it.get_content());
+            }
+
+            match name.as_str() {
                 "img" if let Some(src) = it.get_attribute("src") => {
                     self.m_currParagraph.text_nodes.push(format!("<IMAGE>{}</IMAGE>", src).to_string());
                 },
