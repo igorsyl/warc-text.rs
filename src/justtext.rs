@@ -195,8 +195,8 @@ impl Justext {
                     tag = "p";
                 }
                 // if !full {
-                //     out.push_str(&paragraph.text);
-                //     out.push_str(" ");
+                    out.push_str(&paragraph.text);
+                    out.push_str(" ");
                 // }
             } else {
                 // if no_boilerplate {
